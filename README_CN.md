@@ -410,7 +410,7 @@ Web 管理界面提供以下功能：
 <details>
 <summary>代理接口调用方式</summary>
 
-GPT-Load 通过分组名称路由请求到不同的 AI 服务。使用方式如下：
+GPT-Load 通过分组名称路由请求到不同的上游服务，包括 AI 渠道和通用 HTTP 渠道 `other`。使用方式如下：
 
 ### 1. 代理端点格式
 
@@ -419,13 +419,13 @@ http://localhost:3001/proxy/{group_name}/{原始API路径}
 ```
 
 - `{group_name}`: 在管理界面创建的分组名称
-- `{原始API路径}`: 保持与原始 AI 服务完全一致的路径
+- `{原始API路径}`: 上游 API 的请求路径；`other` 会将此路径追加到配置的上游基础路径
 
 ### 2. 认证方式
 
 在 Web 管理界面中配置**代理密钥** (`Proxy Keys`)，可设置系统级别和分组级别的代理密钥。
 
-- **认证方式**: 与原生 API 一致，但需将原始密钥替换为配置的代理密钥。
+- **认证方式**: AI 渠道沿用原生 API 的认证位置，但需将原始密钥替换为配置的代理密钥；`other` 的认证与转发规则见下方示例。
 - **密钥作用域**: 在系统设置配置的 **全局代理密钥** 可以在所有分组使用，在分组配置的 **分组代理密钥** 仅在当前分组有效。
 - **格式**: 多个密钥使用半角英文逗号分隔。
 
@@ -524,7 +524,24 @@ curl -X POST http://localhost:3001/proxy/anthropic/v1/messages \
 - 将 `https://api.anthropic.com` 替换为 `http://localhost:3001/proxy/anthropic`
 - 将 `x-api-key` 头部中的原始 API Key 替换为**代理密钥**
 
-### 6. 支持的接口
+### 6. 通用 HTTP 接口调用示例（`other`）
+
+`other` 用于转发非 AI 协议的 HTTP API，**仅支持标准分组**，不支持聚合分组，也不能作为聚合子分组。创建名为 `search`、渠道类型为 `other` 的标准分组，将上游 URL 设置为 `https://api.example.com`：
+
+```bash
+curl -X GET "http://localhost:3001/proxy/search/search?q=test&key=your-proxy-key"
+```
+
+此请求使用查询参数 `key` 进行代理认证，转发至 `https://api.example.com/search?q=test`。
+
+- **路径与查询参数**：客户端路径追加到上游基础路径（如上游为 `https://api.example.com/base`，则转发到 `/base/search`）；客户端 query 整体覆盖上游 URL 的 query，不做合并。
+- **代理认证**：优先使用现有请求头凭据，顺序为 `Authorization: Bearer …`、`X-Api-Key`、`X-Goog-Api-Key`；无可用头凭据时才回退到 query 的 `key`，并在转发前删除该参数。使用头认证时，query 中的业务 `key` 保留。
+- **上游认证与配置**：默认不注入或删除认证头，客户端认证头也会继续转发；如需替换或移除，请显式配置请求头规则。例如 `oauth:${API_KEY}` 将当前轮询选中的分组密钥写入 `oauth` 头。高级 JSON 参数覆盖仍可用。
+- **AI 字段与密钥维护**：测试模型、测试路径（验证端点）、模型映射字段保留并展示，但 `other` 忽略这些配置（包括模型映射严格模式）。测试/批量校验 UI 禁用；后端校验不发起实际请求，直接返回 `true` 且不改变密钥状态；定时校验（cron）跳过此渠道。失效密钥需手动恢复。
+- **重试**：`max_retries` 默认 `0`；显式配置大于 `0` 可按现有故障转移策略对所有 HTTP 方法开启重试，非幂等请求可能重复执行。失败计数仍有效，不因关闭重试而停用。
+- **响应与边界**：最终上游响应保留 body、状态码及多值响应头，错误内容中的当前上游密钥会脱敏；HTTP 响应增量回传，不按 SSE 重建（错误体可能先缓冲/脱敏）。沿用现有超时、重定向与压缩行为，请求体先完整缓冲，不支持 WebSocket 或 CONNECT 隧道。逐跳头清理、CORS/OPTIONS 及现有集成路径处理仍保留，因此并非无条件、逐字节原样透传。
+
+### 7. 支持的接口
 
 **OpenAI Chat Completions 格式（`openai`）：**
 
@@ -552,7 +569,11 @@ curl -X POST http://localhost:3001/proxy/anthropic/v1/messages \
 - `/v1/models` - 模型列表（如果可用）
 - 以及其他所有 Anthropic 原生接口
 
-### 7. 客户端 SDK 配置
+**通用 HTTP 格式（`other`，仅标准分组）：**
+
+- 非 AI 协议的 HTTP API；路径、认证与转发限制见上方 `other` 示例
+
+### 8. 客户端 SDK 配置
 
 **OpenAI Python SDK：**
 
@@ -601,7 +622,7 @@ response = client.messages.create(
 )
 ```
 
-> **重要提示**：作为透明代理服务，GPT-Load 完全保留各 AI 服务的原生 API 格式和认证方式，仅需要替换端点地址并使用在管理端配置的**代理密钥**即可无缝迁移。
+> **重要提示**：AI 渠道可沿用原生 API 格式，替换端点地址并使用管理端配置的**代理密钥**；`other` 则需按上述规则配置上游认证，并注意重试与 HTTP 转发边界。
 
 </details>
 

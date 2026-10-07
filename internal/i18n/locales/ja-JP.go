@@ -65,6 +65,8 @@ var MessagesJaJP = map[string]string{
 	"validation.failed_to_open_file":     "ファイルを開けませんでした",
 	"validation.failed_to_read_file":     "ファイルの内容を読み取れませんでした",
 	"validation.invalid_group_type":      "無効なグループタイプ、'standard'または'aggregate'である必要があります",
+	"validation.other_standard_only": "other チャンネルは標準グループのみサポートしています",
+	"validation.other_cannot_be_sub_group": "other チャンネルのグループは集約グループのサブグループにできません",
 	"validation.sub_groups_required":     "集約グループには少なくとも1つのサブグループが必要です",
 	"validation.invalid_sub_group_id":    "無効なサブグループID",
 	"validation.sub_group_not_found":     "1つ以上のサブグループが見つかりません",

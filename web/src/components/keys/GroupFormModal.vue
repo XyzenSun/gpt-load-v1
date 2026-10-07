@@ -2,9 +2,10 @@
 import { keysApi } from "@/api/keys";
 import { settingsApi } from "@/api/settings";
 import ProxyKeysInput from "@/components/common/ProxyKeysInput.vue";
-import type { Group, GroupConfigOption, UpstreamInfo } from "@/types/models";
+import type { ChannelType, Group, GroupConfigOption, UpstreamInfo } from "@/types/models";
 import { Add, Close, HelpCircleOutline, Remove } from "@vicons/ionicons5";
 import {
+  NAlert,
   NButton,
   NCard,
   NForm,
@@ -67,7 +68,7 @@ interface GroupFormData {
   display_name: string;
   description: string;
   upstreams: UpstreamInfo[];
-  channel_type: "anthropic" | "gemini" | "openai" | "openai-response";
+  channel_type: ChannelType;
   sort: number;
   test_model: string;
   validation_endpoint: string;
@@ -110,6 +111,8 @@ const channelTypeOptions = ref<{ label: string; value: string }[]>([]);
 const configOptions = ref<GroupConfigOption[]>([]);
 const channelTypesFetched = ref(false);
 const configOptionsFetched = ref(false);
+const isOtherChannel = computed(() => formData.channel_type === "other");
+let initializingForm = false;
 
 // 跟踪用户是否已手动修改过字段（仅在新增模式下使用）
 const userModifiedFields = ref({
@@ -162,7 +165,7 @@ const validationEndpointPlaceholder = computed(() => {
 });
 
 // 表单验证规则
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   name: [
     {
       required: true,
@@ -184,7 +187,7 @@ const rules: FormRules = {
   ],
   test_model: [
     {
-      required: true,
+      required: !isOtherChannel.value,
       message: t("keys.enterTestModel"),
       trigger: ["blur", "input"],
     },
@@ -197,7 +200,7 @@ const rules: FormRules = {
       trigger: ["blur", "change"],
     },
   ],
-};
+}));
 
 // 监听弹窗显示状态
 watch(
@@ -210,10 +213,12 @@ watch(
       if (!configOptionsFetched.value) {
         fetchGroupConfigOptions();
       }
+      initializingForm = true;
       resetForm();
       if (props.group) {
         loadGroupData();
       }
+      initializingForm = false;
     }
   }
 );
@@ -221,15 +226,24 @@ watch(
 // 监听渠道类型变化，在新增模式下智能更新默认值
 watch(
   () => formData.channel_type,
-  (_newChannelType, oldChannelType) => {
+  (newChannelType, oldChannelType) => {
+    if (initializingForm) {
+      return;
+    }
+    if (newChannelType === "other") {
+      ensureOtherRetryDefault();
+    }
+    formRef.value?.restoreValidation();
     if (!props.group && oldChannelType) {
       // 仅在新增模式且不是初始设置时处理
       // 检查测试模型是否应该更新（为空或是旧渠道类型的默认值）
       if (
-        !userModifiedFields.value.test_model ||
-        formData.test_model === getOldDefaultTestModel(oldChannelType)
+        newChannelType !== "other" &&
+        oldChannelType !== "other" &&
+        (!userModifiedFields.value.test_model ||
+          formData.test_model === getOldDefaultTestModel(oldChannelType))
       ) {
-        formData.test_model = testModelPlaceholder.value;
+        formData.test_model = getOldDefaultTestModel(newChannelType);
         userModifiedFields.value.test_model = false;
       }
 
@@ -239,12 +253,21 @@ watch(
         (!userModifiedFields.value.upstream ||
           formData.upstreams[0].url === getOldDefaultUpstream(oldChannelType))
       ) {
-        formData.upstreams[0].url = upstreamPlaceholder.value;
+        // 占位提示不是默认 URL; other 无预设上游地址.
+        formData.upstreams[0].url = getOldDefaultUpstream(newChannelType);
         userModifiedFields.value.upstream = false;
       }
     }
-  }
+  },
+  { flush: "sync" }
 );
+
+// 仅在进入 other 或加载分组时补默认项, 不覆盖用户值, 也不在删除后自动补回.
+function ensureOtherRetryDefault() {
+  if (!formData.configItems.some(item => item.key === "max_retries")) {
+    formData.configItems.push({ key: "max_retries", value: 0 });
+  }
+}
 
 // 获取旧渠道类型的默认值（用于比较）
 function getOldDefaultTestModel(channelType: string): string {
@@ -352,13 +375,16 @@ function loadGroupData() {
     proxy_keys: props.group.proxy_keys || "",
     group_type: props.group.group_type || "standard",
   });
+  if (isOtherChannel.value) {
+    ensureOtherRetryDefault();
+  }
 }
 
 async function fetchChannelTypes() {
   const options = (await settingsApi.getChannelTypes()) || [];
   channelTypeOptions.value =
     options?.map((type: string) => ({
-      label: type,
+      label: type === "other" ? t("keys.otherChannel") : type,
       value: type,
     })) || [];
   channelTypesFetched.value = true;
@@ -445,7 +471,8 @@ function validateHeaderKeyUniqueness(
 function handleConfigKeyChange(index: number, key: string) {
   const option = configOptions.value.find(opt => opt.key === key);
   if (option) {
-    formData.configItems[index].value = option.default_value;
+    formData.configItems[index].value =
+      isOtherChannel.value && key === "max_retries" ? 0 : option.default_value;
   }
 }
 
@@ -668,6 +695,14 @@ async function handleSubmit() {
             </n-form-item>
           </div>
 
+          <n-alert v-if="isOtherChannel" type="info" :show-icon="false">
+            {{ t("keys.otherChannelDescription") }}
+            <br />
+            {{ t("keys.otherUnusedConfig") }}
+            <br />
+            {{ t("keys.otherRetryDefault") }}
+          </n-alert>
+
           <!-- Test model and test path on the same row -->
           <div class="form-row">
             <n-form-item :label="t('keys.testModel')" path="test_model" class="form-item-half">
@@ -678,7 +713,7 @@ async function handleSubmit() {
                     <template #trigger>
                       <n-icon :component="HelpCircleOutline" class="help-icon" />
                     </template>
-                    {{ t("keys.testModelTooltip") }}
+                    {{ isOtherChannel ? t("keys.otherUnusedConfig") : t("keys.testModelTooltip") }}
                   </n-tooltip>
                 </div>
               </template>
@@ -703,15 +738,18 @@ async function handleSubmit() {
                       <n-icon :component="HelpCircleOutline" class="help-icon" />
                     </template>
                     <div>
-                      {{ t("keys.testPathTooltip1") }}
-                      <br />
-                      • OpenAI: /v1/chat/completions
-                      <br />
-                      • OpenAI Response: /v1/responses
-                      <br />
-                      • Anthropic: /v1/messages
-                      <br />
-                      {{ t("keys.testPathTooltip2") }}
+                      <span v-if="isOtherChannel">{{ t("keys.otherUnusedConfig") }}</span>
+                      <template v-else>
+                        {{ t("keys.testPathTooltip1") }}
+                        <br />
+                        • OpenAI: /v1/chat/completions
+                        <br />
+                        • OpenAI Response: /v1/responses
+                        <br />
+                        • Anthropic: /v1/messages
+                        <br />
+                        {{ t("keys.testPathTooltip2") }}
+                      </template>
                     </div>
                   </n-tooltip>
                 </div>
@@ -927,7 +965,10 @@ async function handleSubmit() {
                             />
                           </template>
                           {{
-                            getConfigOption(configItem.key)?.description || t("keys.setConfigValue")
+                            isOtherChannel && configItem.key === "max_retries"
+                              ? t("keys.otherRetryDefault")
+                              : getConfigOption(configItem.key)?.description ||
+                                t("keys.setConfigValue")
                           }}
                         </n-tooltip>
                       </div>
@@ -1093,7 +1134,11 @@ async function handleSubmit() {
                         <template #trigger>
                           <n-icon :component="HelpCircleOutline" class="help-icon config-help" />
                         </template>
-                        {{ t("keys.modelRedirectPolicyTooltip") }}
+                        {{
+                          isOtherChannel
+                            ? t("keys.otherUnusedConfig")
+                            : t("keys.modelRedirectPolicyTooltip")
+                        }}
                       </n-tooltip>
                     </div>
                   </template>
@@ -1101,15 +1146,18 @@ async function handleSubmit() {
                     <n-switch v-model:value="formData.model_redirect_strict" />
                     <span style="font-size: 14px; color: #666">
                       {{
-                        formData.model_redirect_strict
-                          ? t("keys.modelRedirectStrictMode")
-                          : t("keys.modelRedirectLooseMode")
+                        isOtherChannel
+                          ? t("keys.otherConfigUnused")
+                          : formData.model_redirect_strict
+                            ? t("keys.modelRedirectStrictMode")
+                            : t("keys.modelRedirectLooseMode")
                       }}
                     </span>
                   </div>
                   <template #feedback>
                     <div style="font-size: 12px; color: #999; margin: 4px 0">
-                      <div v-if="formData.model_redirect_strict" style="color: #f5a623">
+                      <div v-if="isOtherChannel">{{ t("keys.otherUnusedConfig") }}</div>
+                      <div v-else-if="formData.model_redirect_strict" style="color: #f5a623">
                         ⚠️ {{ t("keys.modelRedirectStrictWarning") }}
                       </div>
                       <div v-else style="color: #52c41a">
@@ -1127,7 +1175,11 @@ async function handleSubmit() {
                         <template #trigger>
                           <n-icon :component="HelpCircleOutline" class="help-icon config-help" />
                         </template>
-                        {{ t("keys.modelRedirectRulesTooltip") }}
+                        {{
+                          isOtherChannel
+                            ? t("keys.otherUnusedConfig")
+                            : t("keys.modelRedirectRulesTooltip")
+                        }}
                       </n-tooltip>
                     </div>
                   </template>
@@ -1139,7 +1191,11 @@ async function handleSubmit() {
                   />
                   <template #feedback>
                     <div style="font-size: 14px; color: #999">
-                      {{ t("keys.modelRedirectRulesDescription") }}
+                      {{
+                        isOtherChannel
+                          ? t("keys.otherUnusedConfig")
+                          : t("keys.modelRedirectRulesDescription")
+                      }}
                     </div>
                   </template>
                 </n-form-item>

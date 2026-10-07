@@ -12,6 +12,7 @@ import { copy } from "@/utils/clipboard";
 import { getGroupDisplayName, maskProxyKeys } from "@/utils/display";
 import { CopyOutline, EyeOffOutline, EyeOutline, Pencil, Trash } from "@vicons/ionicons5";
 import {
+  NAlert,
   NButton,
   NButtonGroup,
   NCard,
@@ -80,6 +81,8 @@ const hasAdvancedConfig = computed(() => {
   return (
     (props.group?.config && Object.keys(props.group.config).length > 0) ||
     props.group?.param_overrides ||
+    props.group?.model_redirect_rules ||
+    props.group?.model_redirect_strict ||
     (props.group?.header_rules && props.group.header_rules.length > 0)
   );
 });
@@ -205,6 +208,9 @@ function getConfigDisplayName(key: string): string {
 }
 
 function getConfigDescription(key: string): string {
+  if (props.group?.channel_type === "other" && key === "max_retries") {
+    return t("keys.otherRetryDefault");
+  }
   const option = configOptions.value.find(opt => opt.key === key);
   return option?.description || t("keys.noDescription");
 }
@@ -538,6 +544,13 @@ function resetPage() {
             <div class="details-content">
               <div class="detail-section">
                 <h4 class="section-title">{{ t("keys.basicInfo") }}</h4>
+                <n-alert v-if="group?.channel_type === 'other'" type="info" :show-icon="false">
+                  {{ t("keys.otherChannelDescription") }}
+                  <br />
+                  {{ t("keys.otherUnusedConfig") }}
+                  <br />
+                  {{ t("keys.otherRetryDefault") }}
+                </n-alert>
                 <n-form label-placement="left" label-width="140px" label-align="right">
                   <n-grid cols="1 m:2">
                     <n-grid-item>
@@ -552,7 +565,11 @@ function resetPage() {
                     </n-grid-item>
                     <n-grid-item>
                       <n-form-item :label="`${t('keys.channelType')}：`">
-                        {{ group?.channel_type }}
+                        {{
+                          group?.channel_type === "other"
+                            ? t("keys.otherChannel")
+                            : group?.channel_type
+                        }}
                       </n-form-item>
                     </n-grid-item>
                     <n-grid-item>
@@ -702,7 +719,7 @@ function resetPage() {
                         </div>
                       </n-tooltip>
                     </template>
-                    {{ value || "-" }}
+                    {{ value ?? "-" }}
                   </n-form-item>
                   <n-form-item
                     v-if="group?.header_rules && group.header_rules.length > 0"
@@ -736,9 +753,11 @@ function resetPage() {
                       size="small"
                     >
                       {{
-                        group?.model_redirect_strict
-                          ? t("keys.modelRedirectStrictMode")
-                          : t("keys.modelRedirectLooseMode")
+                        group?.channel_type === "other"
+                          ? t("keys.otherConfigUnused")
+                          : group?.model_redirect_strict
+                            ? t("keys.modelRedirectStrictMode")
+                            : t("keys.modelRedirectLooseMode")
                       }}
                     </n-tag>
                   </n-form-item>

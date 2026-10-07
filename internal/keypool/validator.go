@@ -52,6 +52,11 @@ func NewKeyValidator(params KeyValidatorParams) *KeyValidator {
 
 // ValidateSingleKey performs a validation check on a single API key.
 func (s *KeyValidator) ValidateSingleKey(key *models.APIKey, group *models.Group) (bool, error) {
+	// 通用上游没有校验协议，直接返回，不解析配置或改变密钥状态。
+	if group.ChannelType == "other" {
+		return true, nil
+	}
+
 	if group.EffectiveConfig.AppUrl == "" {
 		group.EffectiveConfig = s.SettingsManager.GetEffectiveConfig(group.Config)
 	}

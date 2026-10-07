@@ -23,6 +23,11 @@ func (ps *ProxyServer) applyParamOverrides(bodyBytes []byte, group *models.Group
 		return bodyBytes, nil
 	}
 
+	// JSON null 没有可覆盖的对象字段, 与其他非对象请求体一样原样转发.
+	if requestData == nil {
+		return bodyBytes, nil
+	}
+
 	for key, value := range group.ParamOverrides {
 		requestData[key] = value
 	}

@@ -410,7 +410,7 @@ The web management interface provides the following features:
 <details>
 <summary>Proxy Interface Invocation</summary>
 
-GPT-Load routes requests to different AI services through group names. Usage is as follows:
+GPT-Load routes requests to upstream services by group name, including AI channels and the generic HTTP channel `other`. Usage is as follows:
 
 ### 1. Proxy Endpoint Format
 
@@ -419,13 +419,13 @@ http://localhost:3001/proxy/{group_name}/{original_api_path}
 ```
 
 - `{group_name}`: Group name created in the management interface
-- `{original_api_path}`: Maintain complete consistency with original AI service paths
+- `{original_api_path}`: The upstream API request path; `other` appends it to the configured upstream base path
 
 ### 2. Authentication Methods
 
 Configure **Proxy Keys** in the web management interface, which supports system-level and group-level proxy keys.
 
-- **Authentication Method**: Consistent with the native API, but replace the original key with the configured proxy key.
+- **Authentication Method**: AI channels use the native API's authentication location, with the original key replaced by the configured proxy key. See the `other` example below for its authentication and forwarding rules.
 - **Key Scope**: **Global Proxy Keys** configured in system settings can be used in all groups. **Group Proxy Keys** configured in a group are only valid for the current group.
 - **Format**: Multiple keys are separated by commas.
 
@@ -524,7 +524,24 @@ curl -X POST http://localhost:3001/proxy/anthropic/v1/messages \
 - Replace `https://api.anthropic.com` with `http://localhost:3001/proxy/anthropic`
 - Replace the original API Key in `x-api-key` header with the **Proxy Key**
 
-### 6. Supported Interfaces
+### 6. Generic HTTP Interface Example (`other`)
+
+`other` forwards HTTP APIs without an AI-specific protocol. It supports **standard groups only**: it cannot be an aggregate group or an aggregate subgroup. Create a standard group named `search` with channel type `other` and upstream URL `https://api.example.com`:
+
+```bash
+curl -X GET "http://localhost:3001/proxy/search/search?q=test&key=your-proxy-key"
+```
+
+This request uses query parameter `key` for proxy authentication and is forwarded to `https://api.example.com/search?q=test`.
+
+- **Path and query**: The client path is appended to the upstream base path (an upstream of `https://api.example.com/base` produces `/base/search`). The client query replaces the entire upstream URL query; they are not merged.
+- **Proxy authentication**: Existing header credentials take precedence, in this order: `Authorization: Bearer …`, `X-Api-Key`, then `X-Goog-Api-Key`. Only when no usable header credential exists does authentication fall back to query `key`, which is removed before forwarding. With header authentication, a business `key` query parameter is preserved.
+- **Upstream authentication and configuration**: No authentication headers are injected or removed by default; client authentication headers are forwarded too. Configure explicit header rules to replace or remove them. For example, `oauth:${API_KEY}` sets the `oauth` header to the group key selected by key rotation. Advanced JSON parameter overrides remain available.
+- **AI fields and key maintenance**: Test model, test path (validation endpoint), and model mapping fields remain stored and visible, but are ignored by `other` (including strict model mapping mode). Test/batch-validation UI actions are disabled. Backend validation makes no actual request, returns `true`, and does not change key state; scheduled validation (cron) skips this channel. Invalid keys must be restored manually.
+- **Retries**: `max_retries` defaults to `0`. An explicit value greater than `0` enables retries for all HTTP methods under the existing failover policy; non-idempotent requests may execute more than once. Failure counting remains active even with retries disabled.
+- **Responses and limits**: The final upstream response retains its body, status code, and multi-value headers, with the current upstream key redacted from error content. HTTP responses are forwarded incrementally, not reconstructed as SSE (error bodies may be buffered/redacted first). Existing timeout, redirect, and compression behavior still applies. Request bodies are fully buffered first; WebSocket and CONNECT tunnels are not supported. Hop-by-hop header removal, CORS/OPTIONS handling, and existing integration-path handling remain exceptions, so this is not unconditional, byte-for-byte passthrough.
+
+### 7. Supported Interfaces
 
 **OpenAI Chat Completions Format (`openai`):**
 
@@ -552,7 +569,11 @@ curl -X POST http://localhost:3001/proxy/anthropic/v1/messages \
 - `/v1/models` - Model list (if available)
 - And all other Anthropic native interfaces
 
-### 7. Client SDK Configuration
+**Generic HTTP Format (`other`, standard groups only):**
+
+- HTTP APIs without an AI-specific protocol; see the `other` example above for path, authentication, and forwarding limits
+
+### 8. Client SDK Configuration
 
 **OpenAI Python SDK:**
 
@@ -601,7 +622,7 @@ response = client.messages.create(
 )
 ```
 
-> **Important Note**: As a transparent proxy service, GPT-Load completely preserves the native API formats and authentication methods of various AI services. You only need to replace the endpoint address and use the **Proxy Key** configured in the management interface for seamless migration.
+> **Important Note**: AI channels use native API formats with a replacement endpoint and the **Proxy Key** configured in the management interface. For `other`, configure upstream authentication according to the rules above and account for retry behavior and HTTP forwarding limits.
 
 </details>
 

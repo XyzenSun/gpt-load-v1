@@ -124,7 +124,7 @@ type GroupUpdateRequest struct {
 	Upstreams           json.RawMessage     `json:"upstreams"`
 	ChannelType         *string             `json:"channel_type,omitempty"`
 	Sort                *int                `json:"sort"`
-	TestModel           string              `json:"test_model"`
+	TestModel           *string             `json:"test_model"`
 	ValidationEndpoint  *string             `json:"validation_endpoint,omitempty"`
 	ParamOverrides      map[string]any      `json:"param_overrides"`
 	ModelRedirectRules  map[string]string   `json:"model_redirect_rules"`
@@ -199,9 +199,26 @@ func (s *Server) UpdateGroup(c *gin.Context) {
 		params.HasUpstreams = true
 	}
 
-	if req.TestModel != "" {
-		params.TestModel = req.TestModel
-		params.HasTestModel = true
+	if req.TestModel != nil {
+		hasTestModel := *req.TestModel != ""
+		if !hasTestModel {
+			var targetChannelType string
+			if req.ChannelType != nil {
+				targetChannelType = strings.TrimSpace(*req.ChannelType)
+			} else {
+				group, ok := s.findGroupByID(c, uint(id))
+				if !ok {
+					return
+				}
+				targetChannelType = group.ChannelType
+			}
+			// AI 空字符串仍忽略, other 允许清空. 纯空白继续交由 service 校验.
+			hasTestModel = targetChannelType == "other"
+		}
+		if hasTestModel {
+			params.TestModel = *req.TestModel
+			params.HasTestModel = true
+		}
 	}
 
 	if req.HeaderRules != nil {

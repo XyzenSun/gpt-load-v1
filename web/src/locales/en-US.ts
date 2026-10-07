@@ -309,7 +309,19 @@ export default {
     displayNameTooltip:
       "Friendly name displayed in the UI, can contain Chinese and special characters. If not filled, group name will be used as display name",
     channelTypeTooltip:
-      "Select API provider type, determines request format and authentication method. Supports major AI providers like OpenAI, Gemini, Anthropic",
+      "Select the API channel type. Supports OpenAI, Gemini, Anthropic and more; other is only available for standard groups and does not support key testing, model mapping or aggregate subgroups.",
+    otherChannel: "Other (other)",
+    otherChannelDescription:
+      "other forwards requests to other upstream APIs and only supports standard groups. Enter the upstream URL manually; request headers and JSON parameter overrides remain available.",
+    otherUnusedConfig:
+      "other preserves the test model, test path (validation endpoint) and model mapping configuration, but none of these settings take effect (including strict mode). The test model is optional.",
+    otherConfigUnused: "Configuration preserved, not used by other",
+    otherRetryDefault:
+      "max_retries defaults to 0 for other. You can explicitly set another value in Advanced Configuration; removing this item still uses the backend default of 0. Switching to another channel preserves existing configuration.",
+    otherTestingUnsupported:
+      "This channel (other) does not support key testing or batch validation. Invalid keys can still be restored manually.",
+    otherAggregateUnsupported:
+      "other does not support aggregate groups and cannot be an aggregate subgroup.",
     sortOrderTooltip:
       "Determines display order in the list, smaller numbers appear first. Recommend using intervals like 10, 20, 30 for easy adjustment",
     sortValue: "Sort value",

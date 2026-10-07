@@ -403,13 +403,16 @@ function handleDragEnd() {
                 <span v-else-if="group.channel_type === 'openai-response'">🔁</span>
                 <span v-else-if="group.channel_type === 'gemini'">💎</span>
                 <span v-else-if="group.channel_type === 'anthropic'">🧠</span>
+                <span v-else-if="group.channel_type === 'other'">🌐</span>
                 <span v-else>🔧</span>
               </div>
               <div class="group-content">
                 <div class="group-name">{{ getGroupDisplayName(group) }}</div>
                 <div class="group-meta">
                   <n-tag size="tiny" :type="getChannelTagType(group.channel_type)">
-                    {{ group.channel_type }}
+                    {{
+                      group.channel_type === "other" ? t("keys.otherChannel") : group.channel_type
+                    }}
                   </n-tag>
                   <n-tag v-if="group.group_type === 'aggregate'" size="tiny" type="warning" round>
                     {{ t("keys.aggregateGroup") }}

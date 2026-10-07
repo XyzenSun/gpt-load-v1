@@ -65,6 +65,8 @@ var MessagesZhCN = map[string]string{
 	"validation.failed_to_open_file":     "无法打开文件",
 	"validation.failed_to_read_file":     "无法读取文件内容",
 	"validation.invalid_group_type":      "无效的分组类型，必须为'standard'或'aggregate'",
+	"validation.other_standard_only": "other 渠道仅支持标准分组",
+	"validation.other_cannot_be_sub_group": "other 渠道分组不能作为聚合分组的子分组",
 	"validation.sub_groups_required":     "聚合分组必须包含至少一个子分组",
 	"validation.invalid_sub_group_id":    "无效的子分组ID",
 	"validation.sub_group_not_found":     "一个或多个子分组不存在",

@@ -308,7 +308,19 @@ export default {
     displayNameTooltip:
       "UIに表示されるフレンドリーな名前、中国語や特殊文字を含むことができます。未入力の場合、グループ名が表示名として使用されます",
     channelTypeTooltip:
-      "APIプロバイダータイプを選択、リクエスト形式と認証方法を決定します。OpenAI、Gemini、Anthropicなどの主要AIプロバイダーをサポート",
+      "APIチャンネルタイプを選択します。OpenAI、Gemini、Anthropicなどに対応。otherは標準グループ専用で、キーテスト、モデルマッピング、集約サブグループには対応しません。",
+    otherChannel: "その他 (other)",
+    otherChannelDescription:
+      "otherは他のアップストリームAPIにリクエストを転送する標準グループ専用のチャンネルです。URLは手動で入力してください。リクエストヘッダーとJSONパラメーターの上書きは引き続き設定できます。",
+    otherUnusedConfig:
+      "otherはテストモデル、テストパス（検証エンドポイント）、モデルマッピング設定（厳格モードを含む）を保持しますが、これらの設定はすべて適用されません。テストモデルの入力は任意です。",
+    otherConfigUnused: "設定は保持されますが、otherでは使用されません",
+    otherRetryDefault:
+      "otherのmax_retriesのデフォルト値は0です。詳細設定で別の値を明示的に指定できます。この項目を削除してもバックエンドのデフォルト値0が使用されます。他のチャンネルに切り替えても既存の設定は保持されます。",
+    otherTestingUnsupported:
+      "このチャンネル（other）はキーテストと一括検証に対応していません。無効なキーの手動復元は引き続き利用できます。",
+    otherAggregateUnsupported:
+      "otherは集約グループに対応しておらず、集約グループのサブグループにも指定できません。",
     sortOrderTooltip:
       "リスト内の表示順序を決定、数値が小さいほど前に表示されます。10、20、30のような間隔での設定を推奨",
     sortValue: "ソート値",

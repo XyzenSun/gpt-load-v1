@@ -81,6 +81,11 @@ const rules: FormRules = {
       message: t("keys.selectChannelType"),
       trigger: ["blur", "change"],
     },
+    {
+      validator: (_rule, value: ChannelType) =>
+        value !== "other" || new Error(t("keys.otherAggregateUnsupported")),
+      trigger: ["blur", "change"],
+    },
   ],
 };
 
@@ -220,6 +225,7 @@ async function handleSubmit() {
               :placeholder="t('keys.selectChannelType')"
               :disabled="!!props.group"
             />
+            <template #feedback>{{ t("keys.otherAggregateUnsupported") }}</template>
           </n-form-item>
 
           <n-form-item :label="t('keys.sortOrder')">

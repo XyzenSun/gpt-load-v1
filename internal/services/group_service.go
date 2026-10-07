@@ -182,6 +182,10 @@ func (s *GroupService) CreateGroup(ctx context.Context, params GroupCreateParams
 		return nil, NewI18nError(app_errors.ErrValidation, "validation.invalid_group_type", nil)
 	}
 
+	if groupType == "aggregate" && channelType == "other" {
+		return nil, NewI18nError(app_errors.ErrBadRequest, "validation.other_standard_only", nil)
+	}
+
 	var cleanedUpstreams datatypes.JSON
 	var testModel string
 	var validationEndpoint string
@@ -193,7 +197,7 @@ func (s *GroupService) CreateGroup(ctx context.Context, params GroupCreateParams
 		testModel = "-"
 	case "standard":
 		testModel = strings.TrimSpace(params.TestModel)
-		if testModel == "" {
+		if testModel == "" && channelType != "other" {
 			return nil, NewI18nError(app_errors.ErrValidation, "validation.test_model_required", nil)
 		}
 		cleaned, err := s.validateAndCleanUpstreams(params.Upstreams)
@@ -211,6 +215,9 @@ func (s *GroupService) CreateGroup(ctx context.Context, params GroupCreateParams
 	cleanedConfig, err := s.validateAndCleanConfig(params.Config)
 	if err != nil {
 		return nil, err
+	}
+	if channelType == "other" {
+		cleanedConfig = ensureOtherMaxRetries(cleanedConfig)
 	}
 
 	headerRulesJSON, err := s.normalizeHeaderRules(params.HeaderRules)
@@ -359,6 +366,25 @@ func (s *GroupService) UpdateGroup(ctx context.Context, id uint, params GroupUpd
 	}
 	defer tx.Rollback()
 
+	// 聚合组渠道保持原有不可变规则, 但不能静默接受 other.
+	originalChannelType := group.ChannelType
+	targetChannelType := originalChannelType
+	if params.ChannelType != nil {
+		targetChannelType = strings.TrimSpace(*params.ChannelType)
+	}
+	if params.GroupType != nil {
+		targetGroupType := strings.TrimSpace(*params.GroupType)
+		if targetGroupType != "standard" && targetGroupType != "aggregate" {
+			return nil, NewI18nError(app_errors.ErrValidation, "validation.invalid_group_type", nil)
+		}
+		if targetGroupType == "aggregate" && targetChannelType == "other" {
+			return nil, NewI18nError(app_errors.ErrBadRequest, "validation.other_standard_only", nil)
+		}
+	}
+	if group.GroupType == "aggregate" && targetChannelType == "other" {
+		return nil, NewI18nError(app_errors.ErrBadRequest, "validation.other_standard_only", nil)
+	}
+
 	if params.Name != nil {
 		cleanedName := strings.TrimSpace(*params.Name)
 		if !isValidGroupName(cleanedName) {
@@ -426,10 +452,13 @@ func (s *GroupService) UpdateGroup(ctx context.Context, id uint, params GroupUpd
 
 	if params.HasTestModel {
 		cleanedTestModel := strings.TrimSpace(params.TestModel)
-		if cleanedTestModel == "" {
+		if cleanedTestModel == "" && group.ChannelType != "other" {
 			return nil, NewI18nError(app_errors.ErrValidation, "validation.test_model_empty", nil)
 		}
 		group.TestModel = cleanedTestModel
+	}
+	if originalChannelType == "other" && group.ChannelType != "other" && group.GroupType != "aggregate" && strings.TrimSpace(group.TestModel) == "" {
+		return nil, NewI18nError(app_errors.ErrValidation, "validation.test_model_required", nil)
 	}
 
 	if params.ParamOverrides != nil {
@@ -467,6 +496,10 @@ func (s *GroupService) UpdateGroup(ctx context.Context, id uint, params GroupUpd
 			return nil, err
 		}
 		group.Config = cleanedConfig
+	}
+	// 每次更新 other 都补齐默认覆盖, 包括切换渠道与删除覆盖.
+	if group.ChannelType == "other" {
+		group.Config = ensureOtherMaxRetries(group.Config)
 	}
 
 	if params.ProxyKeys != nil {
@@ -594,6 +627,12 @@ func (s *GroupService) CopyGroup(ctx context.Context, sourceGroupID uint, copyKe
 	newGroup.CreatedAt = time.Time{}
 	newGroup.UpdatedAt = time.Time{}
 	newGroup.LastValidatedAt = nil
+	if newGroup.ChannelType == "other" {
+		if newGroup.GroupType == "aggregate" {
+			return nil, NewI18nError(app_errors.ErrBadRequest, "validation.other_standard_only", nil)
+		}
+		newGroup.Config = ensureOtherMaxRetries(newGroup.Config)
+	}
 
 	if err := tx.Create(&newGroup).Error; err != nil {
 		return nil, app_errors.ParseDBError(err)
@@ -897,6 +936,25 @@ func (s *GroupService) validateAndCleanConfig(configMap map[string]any) (map[str
 	}
 
 	return finalMap, nil
+}
+
+// ensureOtherMaxRetries 持久化默认覆盖, 不改变其他字段.
+// 复用 GroupConfig 指针语义, 区分显式零值与缺失/null.
+func ensureOtherMaxRetries(configMap map[string]any) map[string]any {
+	result := make(map[string]any, len(configMap)+1)
+	for key, value := range configMap {
+		result[key] = value
+	}
+
+	var groupConfig models.GroupConfig
+	valueJSON, err := json.Marshal(map[string]any{"max_retries": result["max_retries"]})
+	if err == nil {
+		err = json.Unmarshal(valueJSON, &groupConfig)
+	}
+	if err != nil || groupConfig.MaxRetries == nil || *groupConfig.MaxRetries < 0 {
+		result["max_retries"] = float64(0)
+	}
+	return result
 }
 
 // normalizeHeaderRules deduplicates and normalises header rules.

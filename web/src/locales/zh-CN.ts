@@ -304,7 +304,18 @@ export default {
     displayNameTooltip:
       "用于在界面上显示的友好名称，可以包含中文和特殊字符。如果不填写，将使用分组名称作为显示名称",
     channelTypeTooltip:
-      "选择API提供商类型，决定了请求格式和认证方式。支持OpenAI、Gemini、Anthropic等主流AI服务商",
+      "选择API渠道类型。支持OpenAI、Gemini、Anthropic等；other仅适用于标准分组，不支持密钥测试、模型映射或聚合子分组。",
+    otherChannel: "其他 (other)",
+    otherChannelDescription:
+      "other用于转发其他上游API，仅支持标准分组。请手动填写上游URL；仍可配置请求头和JSON参数覆盖。",
+    otherUnusedConfig:
+      "other保留测试模型、测试路径（验证端点）和模型映射配置，但这些配置均不生效（包括严格模式）；测试模型为非必填。",
+    otherConfigUnused: "配置已保留，other渠道不使用",
+    otherRetryDefault:
+      "other的max_retries默认值为0。可在高级配置中显式设置其他值；删除此项后，后端仍默认使用0。切换到其他渠道不会删除已有配置。",
+    otherTestingUnsupported:
+      "此渠道（other）不支持密钥测试或批量校验；可使用手动恢复入口恢复无效密钥。",
+    otherAggregateUnsupported: "other不支持聚合分组，也不能作为聚合分组的子分组。",
     sortOrderTooltip:
       "决定分组在列表中的显示顺序，数字越小越靠前。建议使用10、20、30这样的间隔数字，便于后续调整",
     sortValue: "排序值",

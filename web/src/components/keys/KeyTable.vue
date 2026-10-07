@@ -16,6 +16,7 @@ import {
   Search,
 } from "@vicons/ionicons5";
 import {
+  NAlert,
   NButton,
   NDropdown,
   NEmpty,
@@ -28,7 +29,7 @@ import {
   useDialog,
   type MessageReactive,
 } from "naive-ui";
-import { h, ref, watch } from "vue";
+import { computed, h, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import KeyCreateDialog from "./KeyCreateDialog.vue";
 import KeyDeleteDialog from "./KeyDeleteDialog.vue";
@@ -55,6 +56,7 @@ const total = ref(0);
 const totalPages = ref(0);
 const dialog = useDialog();
 const confirmInput = ref("");
+const isOtherChannel = computed(() => props.selectedGroup?.channel_type === "other");
 
 // 状态过滤选项
 const statusOptions = [
@@ -64,27 +66,34 @@ const statusOptions = [
 ];
 
 // 更多操作下拉菜单选项
-const moreOptions = [
-  { label: t("keys.exportAllKeys"), key: "copyAll" },
-  { label: t("keys.exportValidKeys"), key: "copyValid" },
-  { label: t("keys.exportInvalidKeys"), key: "copyInvalid" },
-  { type: "divider" },
-  { label: t("keys.restoreAllInvalidKeys"), key: "restoreAll" },
-  {
-    label: t("keys.clearAllInvalidKeys"),
-    key: "clearInvalid",
-    props: { style: { color: "#d03050" } },
-  },
-  {
-    label: t("keys.clearAllKeys"),
-    key: "clearAll",
-    props: { style: { color: "red", fontWeight: "bold" } },
-  },
-  { type: "divider" },
-  { label: t("keys.validateAllKeys"), key: "validateAll" },
-  { label: t("keys.validateValidKeys"), key: "validateActive" },
-  { label: t("keys.validateInvalidKeys"), key: "validateInvalid" },
-];
+const moreOptions = computed(() => {
+  const options = [
+    { label: t("keys.exportAllKeys"), key: "copyAll" },
+    { label: t("keys.exportValidKeys"), key: "copyValid" },
+    { label: t("keys.exportInvalidKeys"), key: "copyInvalid" },
+    { type: "divider" },
+    { label: t("keys.restoreAllInvalidKeys"), key: "restoreAll" },
+    {
+      label: t("keys.clearAllInvalidKeys"),
+      key: "clearInvalid",
+      props: { style: { color: "#d03050" } },
+    },
+    {
+      label: t("keys.clearAllKeys"),
+      key: "clearAll",
+      props: { style: { color: "red", fontWeight: "bold" } },
+    },
+  ];
+  if (!isOtherChannel.value) {
+    options.push(
+      { type: "divider" },
+      { label: t("keys.validateAllKeys"), key: "validateAll" },
+      { label: t("keys.validateValidKeys"), key: "validateActive" },
+      { label: t("keys.validateInvalidKeys"), key: "validateInvalid" }
+    );
+  }
+  return options;
+});
 
 let testingMsg: MessageReactive | null = null;
 const isDeling = ref(false);
@@ -231,6 +240,10 @@ async function copyKey(key: KeyRow) {
 }
 
 async function testKey(_key: KeyRow) {
+  if (isOtherChannel.value) {
+    window.$message.info(t("keys.otherTestingUnsupported"));
+    return;
+  }
   if (!props.selectedGroup?.id || !_key.key_value || testingMsg) {
     return;
   }
@@ -483,6 +496,10 @@ async function restoreAllInvalid() {
 }
 
 async function validateKeys(status: "all" | "active" | "invalid") {
+  if (isOtherChannel.value) {
+    window.$message.info(t("keys.otherTestingUnsupported"));
+    return;
+  }
   if (!props.selectedGroup?.id || testingMsg) {
     return;
   }
@@ -681,6 +698,10 @@ function resetPage() {
       </div>
     </div>
 
+    <n-alert v-if="isOtherChannel" type="info" :show-icon="false">
+      {{ t("keys.otherTestingUnsupported") }}
+    </n-alert>
+
     <!-- 密钥卡片网格 -->
     <div class="keys-grid-container">
       <n-spin :show="loading">
@@ -762,7 +783,8 @@ function resetPage() {
                   type="info"
                   size="tiny"
                   @click="testKey(key)"
-                  :title="t('keys.testKey')"
+                  :disabled="isOtherChannel"
+                  :title="isOtherChannel ? t('keys.otherTestingUnsupported') : t('keys.testKey')"
                 >
                   {{ t("keys.testShort") }}
                 </n-button>

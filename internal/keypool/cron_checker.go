@@ -87,7 +87,7 @@ func (s *CronChecker) runLoop() {
 // submitValidationJobs finds groups whose keys need validation and validates them concurrently.
 func (s *CronChecker) submitValidationJobs() {
 	var groups []models.Group
-	if err := s.DB.Where("group_type != ? OR group_type IS NULL", "aggregate").Find(&groups).Error; err != nil {
+	if err := s.DB.Where("(group_type != ? OR group_type IS NULL) AND channel_type != ?", "aggregate", "other").Find(&groups).Error; err != nil {
 		logrus.Errorf("CronChecker: Failed to get groups: %v", err)
 		return
 	}
@@ -115,6 +115,11 @@ func (s *CronChecker) submitValidationJobs() {
 
 // validateGroupKeys validates all invalid keys for a single group concurrently.
 func (s *CronChecker) validateGroupKeys(group *models.Group) {
+	// 防御直接调用：other 分组不校验，也不更新 last_validated_at。
+	if group.ChannelType == "other" {
+		return
+	}
+
 	groupProcessStart := time.Now()
 
 	var invalidKeys []models.APIKey

@@ -65,6 +65,8 @@ var MessagesEnUS = map[string]string{
 	"validation.failed_to_open_file":     "Failed to open file",
 	"validation.failed_to_read_file":     "Failed to read file content",
 	"validation.invalid_group_type":      "Invalid group type, must be 'standard' or 'aggregate'",
+	"validation.other_standard_only": "The other channel only supports standard groups",
+	"validation.other_cannot_be_sub_group": "Groups using the other channel cannot be aggregate sub-groups",
 	"validation.sub_groups_required":     "Aggregate group must contain at least one sub-group",
 	"validation.invalid_sub_group_id":    "Invalid sub-group ID",
 	"validation.sub_group_not_found":     "One or more sub-groups not found",

@@ -11,6 +11,9 @@ import (
 
 // ChannelProxy defines the interface for different API channel proxies.
 type ChannelProxy interface {
+	// IsPassthrough 表示渠道保留通用 HTTP 语义, 不使用 AI 专用请求和响应处理.
+	IsPassthrough() bool
+
 	// BuildUpstreamURL constructs the target URL for the upstream service.
 	BuildUpstreamURL(originalURL *url.URL, groupName string) (string, error)
 

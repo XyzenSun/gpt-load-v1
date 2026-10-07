@@ -40,6 +40,9 @@ func NewAggregateGroupService(db *gorm.DB, groupManager *GroupManager) *Aggregat
 
 // ValidateSubGroups validates sub-groups with an optional existing validation endpoint for consistency check.
 func (s *AggregateGroupService) ValidateSubGroups(ctx context.Context, channelType string, inputs []SubGroupInput, existingEndpoint string) (*AggregateValidationResult, error) {
+	if channelType == "other" {
+		return nil, NewI18nError(app_errors.ErrBadRequest, "validation.other_standard_only", nil)
+	}
 	if len(inputs) == 0 {
 		return nil, NewI18nError(app_errors.ErrValidation, "validation.sub_groups_required", nil)
 	}
@@ -78,6 +81,9 @@ func (s *AggregateGroupService) ValidateSubGroups(ctx context.Context, channelTy
 	for _, sg := range subGroupModels {
 		if sg.GroupType == "aggregate" {
 			return nil, NewI18nError(app_errors.ErrValidation, "validation.sub_group_cannot_be_aggregate", nil)
+		}
+		if sg.ChannelType == "other" {
+			return nil, NewI18nError(app_errors.ErrBadRequest, "validation.other_cannot_be_sub_group", nil)
 		}
 		if sg.ChannelType != channelType {
 			return nil, NewI18nError(app_errors.ErrValidation, "validation.sub_group_channel_mismatch", nil)

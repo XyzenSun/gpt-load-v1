@@ -27,6 +27,11 @@ func Logger(config types.LogConfig) gin.HandlerFunc {
 		// Process request
 		c.Next()
 
+		// other 使用 query 鉴权时，仅记录删除凭据后的查询参数。
+		if consumed, _ := c.Get(otherQueryAuthConsumed); consumed == true {
+			raw = c.Request.URL.RawQuery
+		}
+
 		// Calculate response time
 		latency := time.Since(start)
 
@@ -142,9 +147,8 @@ func Auth(authConfig types.AuthConfig) gin.HandlerFunc {
 // ProxyAuth
 func ProxyAuth(gm *services.GroupManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Check key
-		key := extractAuthKey(c)
-		if key == "" {
+		// 查询分组前拒绝缺少凭据的请求，但暂不消费 query 中的 key。
+		if c.Query("key") == "" && extractHeaderAuthKey(c) == "" && extractAPIKeyHeader(c) == "" {
 			response.Error(c, app_errors.ErrUnauthorized)
 			c.Abort()
 			return
@@ -153,6 +157,13 @@ func ProxyAuth(gm *services.GroupManager) gin.HandlerFunc {
 		group, err := gm.GetGroupByName(c.Param("group_name"))
 		if err != nil {
 			response.Error(c, app_errors.NewAPIError(app_errors.ErrInternalServer, "Failed to retrieve proxy group"))
+			c.Abort()
+			return
+		}
+
+		key := extractAuthKeyForGroup(c, group.ChannelType, group.GroupType)
+		if key == "" {
+			response.Error(c, app_errors.ErrUnauthorized)
 			c.Abort()
 			return
 		}
@@ -243,16 +254,49 @@ func isMonitoringEndpoint(path string) bool {
 	return false
 }
 
-// extractAuthKey extracts a auth key.
+const otherQueryAuthConsumed = "otherQueryAuthConsumed"
+
+// extractAuthKey 保持管理 API 和已有渠道的 query 优先鉴权。
 func extractAuthKey(c *gin.Context) string {
-	// Query key
+	if key := extractQueryAuthKey(c); key != "" {
+		return key
+	}
+	return extractHeaderAuthKey(c)
+}
+
+func extractAuthKeyForGroup(c *gin.Context, channelType, groupType string) string {
+	// 空分组类型兼容历史标准分组；聚合分组仍然使用 query 优先鉴权。
+	if channelType != "other" || (groupType != "standard" && groupType != "") {
+		return extractAuthKey(c)
+	}
+
+	// 头凭据用于代理鉴权时，不解析或重新编码 RawQuery。
+	if key := extractHeaderAuthKey(c); key != "" {
+		return key
+	}
+	// other 的空 Bearer 凭据不能遮蔽其他可用的请求头凭据。
+	if key := extractAPIKeyHeader(c); key != "" {
+		return key
+	}
+	key := extractQueryAuthKey(c)
+	if key != "" {
+		// 标记已消费的 query 凭据，使 Logger 不记录删除前的 key。
+		c.Set(otherQueryAuthConsumed, true)
+	}
+	return key
+}
+
+func extractQueryAuthKey(c *gin.Context) string {
 	if key := c.Query("key"); key != "" {
 		query := c.Request.URL.Query()
 		query.Del("key")
 		c.Request.URL.RawQuery = query.Encode()
 		return key
 	}
+	return ""
+}
 
+func extractHeaderAuthKey(c *gin.Context) string {
 	// Bearer token
 	authHeader := c.GetHeader("Authorization")
 	if authHeader != "" {
@@ -262,6 +306,10 @@ func extractAuthKey(c *gin.Context) string {
 		}
 	}
 
+	return extractAPIKeyHeader(c)
+}
+
+func extractAPIKeyHeader(c *gin.Context) string {
 	// X-Api-Key
 	if key := c.GetHeader("X-Api-Key"); key != "" {
 		return key

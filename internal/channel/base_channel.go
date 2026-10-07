@@ -75,6 +75,11 @@ func (b *BaseChannel) getUpstreamURL() *url.URL {
 	return best.URL
 }
 
+// IsPassthrough 默认渠道使用各自的 AI 协议处理.
+func (b *BaseChannel) IsPassthrough() bool {
+	return false
+}
+
 // BuildUpstreamURL constructs the target URL for the upstream service.
 func (b *BaseChannel) BuildUpstreamURL(originalURL *url.URL, groupName string) (string, error) {
 	base := b.getUpstreamURL()

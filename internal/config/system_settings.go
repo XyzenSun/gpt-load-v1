@@ -357,16 +357,28 @@ func (sm *SystemSettingsManager) ValidateGroupConfigOverrides(configMap map[stri
 
 		switch field.Type.Kind() {
 		case reflect.Int:
-			floatVal, ok := value.(float64)
-			if !ok {
-				continue
-			}
-			intVal := int(floatVal)
-			if floatVal != float64(intVal) {
-				return fmt.Errorf("invalid value for %s: must be an integer", key)
+			var intVal int
+			if key == "max_retries" {
+				// 仅重试覆盖校验兼容 JSON 数字与服务层整数, 避免扩大其他配置的行为变化.
+				valueJSON, err := json.Marshal(value)
+				if err != nil {
+					return fmt.Errorf("invalid value for %s: must be an integer", key)
+				}
+				if err := json.Unmarshal(valueJSON, &intVal); err != nil {
+					return fmt.Errorf("invalid value for %s: must be an integer", key)
+				}
+			} else {
+				floatVal, ok := value.(float64)
+				if !ok {
+					continue
+				}
+				intVal = int(floatVal)
+				if floatVal != float64(intVal) {
+					return fmt.Errorf("invalid value for %s: must be an integer", key)
+				}
 			}
 
-			// The 'required' check is implicitly handled by the type assertion above.
+			// 数值类型校验已覆盖 required 约束.
 			for _, rule := range rules {
 				trimmedRule := strings.TrimSpace(rule)
 				if strings.HasPrefix(trimmedRule, "min=") {

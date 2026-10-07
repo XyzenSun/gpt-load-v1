@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"gpt-load/internal/channel"
@@ -134,6 +135,11 @@ func (ps *ProxyServer) executeRequestWithRetry(
 		return
 	}
 
+	keyForLog := utils.MaskAPIKey(apiKey.KeyValue)
+	if channelHandler.IsPassthrough() {
+		keyForLog = "[REDACTED]"
+	}
+
 	upstreamURL, err := channelHandler.BuildUpstreamURL(c.Request.URL, originalGroup.Name)
 	if err != nil {
 		response.Error(c, app_errors.NewAPIError(app_errors.ErrInternalServer, fmt.Sprintf("Failed to build upstream URL: %v", err)))
@@ -160,10 +166,12 @@ func (ps *ProxyServer) executeRequestWithRetry(
 
 	req.Header = c.Request.Header.Clone()
 
-	// Clean up client auth key
-	req.Header.Del("Authorization")
-	req.Header.Del("X-Api-Key")
-	req.Header.Del("X-Goog-Api-Key")
+	// AI 渠道替换客户端鉴权, 通用渠道仅应用用户明确配置的头规则.
+	if !channelHandler.IsPassthrough() {
+		req.Header.Del("Authorization")
+		req.Header.Del("X-Api-Key")
+		req.Header.Del("X-Goog-Api-Key")
+	}
 
 	// Apply model redirection
 	finalBodyBytes, err := channelHandler.ApplyModelRedirect(req, bodyBytes, group)
@@ -187,6 +195,10 @@ func (ps *ProxyServer) executeRequestWithRetry(
 		utils.ApplyHeaderRules(req, group.HeaderRuleList, headerCtx)
 	}
 
+	if channelHandler.IsPassthrough() {
+		removeHopByHopHeaders(req.Header)
+	}
+
 	var client *http.Client
 	if isStream {
 		client = channelHandler.GetStreamClient()
@@ -205,39 +217,60 @@ func (ps *ProxyServer) executeRequestWithRetry(
 	shouldRetryByStatus := resp != nil && shouldFailoverOnStatusCode(resp.StatusCode, group)
 	if err != nil || shouldRetryByStatus {
 		if err != nil && app_errors.IsIgnorableError(err) {
-			logrus.Debugf("Client-side ignorable error for key %s, aborting retries: %v", utils.MaskAPIKey(apiKey.KeyValue), err)
-			ps.logRequest(c, originalGroup, group, apiKey, startTime, 499, err, isStream, upstreamURL, channelHandler, bodyBytes, models.RequestTypeFinal)
+			loggedError := err.Error()
+			if channelHandler.IsPassthrough() && apiKey.KeyValue != "" {
+				loggedError = strings.ReplaceAll(loggedError, apiKey.KeyValue, "[REDACTED]")
+			}
+			logrus.Debugf("Client-side ignorable error for key %s, aborting retries: %v", keyForLog, loggedError)
+			ps.logRequest(c, originalGroup, group, apiKey, startTime, 499, errors.New(loggedError), isStream, upstreamURL, channelHandler, bodyBytes, models.RequestTypeFinal)
 			return
 		}
 
 		var statusCode int
 		var errorMessage string
 		var parsedError string
+		var upstreamErrorBody []byte
 
 		if err != nil {
 			statusCode = 500
 			errorMessage = err.Error()
 			parsedError = errorMessage
-			logrus.Debugf("Request failed (attempt %d/%d) for key %s: %v", retryCount+1, cfg.MaxRetries, utils.MaskAPIKey(apiKey.KeyValue), err)
+			loggedError := err
+			if channelHandler.IsPassthrough() && apiKey.KeyValue != "" {
+				loggedError = errors.New(strings.ReplaceAll(err.Error(), apiKey.KeyValue, "[REDACTED]"))
+			}
+			logrus.Debugf("Request failed (attempt %d/%d) for key %s: %v", retryCount+1, cfg.MaxRetries, keyForLog, loggedError)
 		} else {
 			// Retryable upstream response (HTTP status code matched failover policy)
 			statusCode = resp.StatusCode
 			errorBody, readErr := io.ReadAll(resp.Body)
 			if readErr != nil {
 				logrus.Errorf("Failed to read error body: %v", readErr)
-				errorBody = []byte("Failed to read error body")
+				if !channelHandler.IsPassthrough() {
+					errorBody = []byte("Failed to read error body")
+				}
 			}
 
+			upstreamErrorBody = errorBody
 			errorBody = handleGzipCompression(resp, errorBody)
 			errorMessage = string(errorBody)
 			parsedError = app_errors.ParseUpstreamError(errorBody)
-			logrus.Debugf("Request failed with status %d (attempt %d/%d) for key %s. Parsed Error: %s", statusCode, retryCount+1, cfg.MaxRetries, utils.MaskAPIKey(apiKey.KeyValue), parsedError)
+			loggedError := parsedError
+			if channelHandler.IsPassthrough() && apiKey.KeyValue != "" {
+				loggedError = strings.ReplaceAll(parsedError, apiKey.KeyValue, "[REDACTED]")
+			}
+			logrus.Debugf("Request failed with status %d (attempt %d/%d) for key %s. Parsed Error: %s", statusCode, retryCount+1, cfg.MaxRetries, keyForLog, loggedError)
 		}
 
 		// 上游 key 可能出现在错误文本中（如 Gemini 通道将 key 放入 URL query，
 		// 传输层错误会把完整 URL 带入 err.Error()），返回客户端和落库前先脱敏
 		errorMessage = utils.RedactSecret(errorMessage, apiKey.KeyValue)
 		parsedError = utils.RedactSecret(parsedError, apiKey.KeyValue)
+		if channelHandler.IsPassthrough() && apiKey.KeyValue != "" {
+			// 通用密钥没有长度约束, 短密钥也必须从错误信息中移除.
+			errorMessage = strings.ReplaceAll(errorMessage, apiKey.KeyValue, "[REDACTED]")
+			parsedError = strings.ReplaceAll(parsedError, apiKey.KeyValue, "[REDACTED]")
+		}
 
 		// 使用解析后的错误信息更新密钥状态
 		ps.keyProvider.UpdateStatus(apiKey, group, false, parsedError)
@@ -253,6 +286,13 @@ func (ps *ProxyServer) executeRequestWithRetry(
 
 		// 如果是最后一次尝试，直接返回错误，不再递归
 		if isLastAttempt {
+			if channelHandler.IsPassthrough() && err == nil && resp != nil {
+				// 最终错误保留上游格式, 仅在错误内容包含当前密钥时脱敏.
+				upstreamErrorBody = redactPassthroughError(resp, upstreamErrorBody, apiKey.KeyValue)
+				resp.Body = io.NopCloser(bytes.NewReader(upstreamErrorBody))
+				ps.handlePassthroughResponse(c, resp)
+				return
+			}
 			var errorJSON map[string]any
 			if err := json.Unmarshal([]byte(errorMessage), &errorJSON); err == nil {
 				c.JSON(statusCode, errorJSON)
@@ -267,10 +307,21 @@ func (ps *ProxyServer) executeRequestWithRetry(
 	}
 
 	// ps.keyProvider.UpdateStatus(apiKey, group, true) // 请求成功不再重置成功次数，减少IO消耗
-	logrus.Debugf("Request for group %s succeeded on attempt %d with key %s", group.Name, retryCount+1, utils.MaskAPIKey(apiKey.KeyValue))
+	logrus.Debugf("Request for group %s succeeded on attempt %d with key %s", group.Name, retryCount+1, keyForLog)
 
 	// Check if this is a model list request (needs special handling)
-	if shouldInterceptModelList(c.Request.URL.Path, c.Request.Method) {
+	if channelHandler.IsPassthrough() {
+		if resp.StatusCode >= http.StatusBadRequest {
+			// 未命中故障转移的业务错误也需要保护密钥, 不改变失败计数策略.
+			errorBody, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				logUpstreamError("reading passthrough error", readErr)
+			}
+			errorBody = redactPassthroughError(resp, errorBody, apiKey.KeyValue)
+			resp.Body = io.NopCloser(bytes.NewReader(errorBody))
+		}
+		ps.handlePassthroughResponse(c, resp)
+	} else if shouldInterceptModelList(c.Request.URL.Path, c.Request.Method) {
 		ps.handleModelListResponse(c, resp, group, channelHandler)
 	} else {
 		for key, values := range resp.Header {

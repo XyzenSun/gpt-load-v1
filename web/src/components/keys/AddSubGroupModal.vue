@@ -52,7 +52,7 @@ const formData = reactive<{
 
 // 计算可用的分组选项（排除已添加的）
 const getAvailableOptions = computed(() => {
-  if (!props.aggregateGroup?.channel_type) {
+  if (!props.aggregateGroup?.channel_type || props.aggregateGroup.channel_type === "other") {
     return [];
   }
 
@@ -62,7 +62,7 @@ const getAvailableOptions = computed(() => {
   return props.groups
     .filter(group => {
       // 必须是标准分组
-      if (group.group_type === "aggregate") {
+      if (group.group_type === "aggregate" || group.channel_type === "other") {
         return false;
       }
 
@@ -122,6 +122,15 @@ const rules: FormRules = {
       const validItems = value.filter(item => item.group_id !== null);
       if (validItems.length === 0) {
         return new Error(t("keys.atLeastOneSubGroup"));
+      }
+
+      if (
+        props.aggregateGroup?.channel_type === "other" ||
+        validItems.some(item =>
+          props.groups.some(group => group.id === item.group_id && group.channel_type === "other")
+        )
+      ) {
+        return new Error(t("keys.otherAggregateUnsupported"));
       }
 
       // 检查权重是否合法
