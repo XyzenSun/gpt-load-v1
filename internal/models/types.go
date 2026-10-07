@@ -33,6 +33,7 @@ type GroupConfig struct {
 	MaxIdleConnsPerHost          *int    `json:"max_idle_conns_per_host,omitempty"`
 	ResponseHeaderTimeout        *int    `json:"response_header_timeout,omitempty"`
 	ProxyURL                     *string `json:"proxy_url,omitempty"`
+	EnableKeyAffinity            *bool   `json:"enable_key_affinity,omitempty"`
 	MaxRetries                   *int    `json:"max_retries,omitempty"`
 	BlacklistThreshold           *int    `json:"blacklist_threshold,omitempty"`
 	FailoverStatusCodes          *string `json:"failover_status_codes,omitempty"`

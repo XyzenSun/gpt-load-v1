@@ -46,7 +46,7 @@ func newOtherTestService(t *testing.T) *GroupService {
 	}
 	settings := config.NewSystemSettingsManager()
 	memory := &otherTestStore{MemoryStore: store.NewMemoryStore()}
-	manager := NewGroupManager(database, memory, settings, NewSubGroupManager(memory))
+	manager := NewGroupManager(database, memory, settings, NewSubGroupManager(memory), nil)
 	if err := manager.Initialize(); err != nil {
 		t.Fatal(err)
 	}

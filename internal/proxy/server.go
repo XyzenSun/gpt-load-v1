@@ -127,7 +127,11 @@ func (ps *ProxyServer) executeRequestWithRetry(
 ) {
 	cfg := group.EffectiveConfig
 
-	apiKey, err := ps.keyProvider.SelectKey(group.ID)
+	var previousFailedKeyID uint
+	if retryCount > 0 {
+		previousFailedKeyID = c.GetUint("previousFailedKeyID")
+	}
+	apiKey, err := ps.keyProvider.SelectKeyWithAffinity(group, previousFailedKeyID)
 	if err != nil {
 		logrus.Errorf("Failed to select a key for group %s on attempt %d: %v", group.Name, retryCount+1, err)
 		response.Error(c, app_errors.NewAPIError(app_errors.ErrNoKeysAvailable, err.Error()))
@@ -272,6 +276,10 @@ func (ps *ProxyServer) executeRequestWithRetry(
 			parsedError = strings.ReplaceAll(parsedError, apiKey.KeyValue, "[REDACTED]")
 		}
 
+		// 失败后撤销当前绑定, 下一次尝试优先换 key; 客户端断连已在前面直接返回.
+		ps.keyProvider.ForgetFailedKey(group.ID, apiKey.ID)
+		c.Set("previousFailedKeyID", apiKey.ID)
+
 		// 使用解析后的错误信息更新密钥状态
 		ps.keyProvider.UpdateStatus(apiKey, group, false, parsedError)
 
@@ -338,6 +346,10 @@ func (ps *ProxyServer) executeRequestWithRetry(
 		}
 	}
 
+	// 沿用请求日志的成功标准, 不额外解析响应体或 SSE 业务错误.
+	if resp.StatusCode < http.StatusBadRequest {
+		ps.keyProvider.RememberSuccessfulKey(group, apiKey)
+	}
 	ps.logRequest(c, originalGroup, group, apiKey, startTime, resp.StatusCode, nil, isStream, upstreamURL, channelHandler, bodyBytes, models.RequestTypeFinal)
 }
 

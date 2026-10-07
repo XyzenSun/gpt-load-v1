@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -22,6 +23,7 @@ type KeyProvider struct {
 	store           store.Store
 	settingsManager *config.SystemSettingsManager
 	encryptionSvc   encryption.Service
+	keyAffinity     sync.Map
 }
 
 // NewProvider 创建一个新的 KeyProvider 实例。
@@ -37,8 +39,8 @@ func NewProvider(db *gorm.DB, store store.Store, settingsManager *config.SystemS
 // SelectKey 为指定的分组原子性地选择并轮换一个可用的 APIKey。
 func (p *KeyProvider) SelectKey(groupID uint) (*models.APIKey, error) {
 	activeKeysListKey := fmt.Sprintf("group:%d:active_keys", groupID)
+	var remainingAttempts int64 = -1
 
-	// 1. Atomically rotate the key ID from the list
 	keyIDStr, err := p.store.Rotate(activeKeysListKey)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -47,19 +49,53 @@ func (p *KeyProvider) SelectKey(groupID uint) (*models.APIKey, error) {
 		return nil, fmt.Errorf("failed to rotate key from store: %w", err)
 	}
 
-	keyID, err := strconv.ParseUint(keyIDStr, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse key ID '%s': %w", keyIDStr, err)
+	// 删除和黑名单更新可能与轮换并发, 跳过失效项但不掩盖存储故障.
+	for {
+		keyID, err := strconv.ParseUint(keyIDStr, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse key ID '%s': %w", keyIDStr, err)
+		}
+		key, err := p.getActiveKey(groupID, uint(keyID))
+		if !errors.Is(err, app_errors.ErrNoActiveKeys) {
+			return key, err
+		}
+		if remainingAttempts < 0 {
+			remainingAttempts, err = p.store.LLen(activeKeysListKey)
+			if err != nil {
+				return nil, fmt.Errorf("failed to count active keys: %w", err)
+			}
+		}
+		if err := p.store.LRem(activeKeysListKey, 0, keyIDStr); err != nil {
+			return nil, fmt.Errorf("failed to remove stale key from active list: %w", err)
+		}
+		remainingAttempts--
+		if remainingAttempts <= 0 {
+			return nil, app_errors.ErrNoActiveKeys
+		}
+		keyIDStr, err = p.store.Rotate(activeKeysListKey)
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, app_errors.ErrNoActiveKeys
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to rotate key from store: %w", err)
+		}
 	}
+}
 
-	// 2. Get key details from HASH
+// getActiveKey 复用密钥池详情读取和解密, 避免亲和记录继续使用已删除或禁用的密钥.
+func (p *KeyProvider) getActiveKey(groupID, keyID uint) (*models.APIKey, error) {
 	keyHashKey := fmt.Sprintf("key:%d", keyID)
 	keyDetails, err := p.store.HGetAll(keyHashKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get key details for key ID %d: %w", keyID, err)
 	}
 
-	// 3. Manually unmarshal the map into an APIKey struct
+	if keyDetails["id"] != strconv.FormatUint(uint64(keyID), 10) ||
+		keyDetails["group_id"] != strconv.FormatUint(uint64(groupID), 10) ||
+		keyDetails["status"] != models.KeyStatusActive {
+		return nil, app_errors.ErrNoActiveKeys
+	}
+
 	failureCount, _ := strconv.ParseInt(keyDetails["failure_count"], 10, 64)
 	createdAt, _ := strconv.ParseInt(keyDetails["created_at"], 10, 64)
 

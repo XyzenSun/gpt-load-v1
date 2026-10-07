@@ -544,6 +544,9 @@ export default {
     globalProxyKeys: "グローバルプロキシキー",
     requestTimeout: "リクエストタイムアウト",
     connectTimeout: "接続タイムアウト",
+    enableKeyAffinity: "キーアフィニティを有効化",
+    enableKeyAffinityDesc:
+      "各グループで最後に成功したキーを単一インスタンスのメモリに記憶し、優先的に再利用します。失敗時は切り替えます。インスタンス間で共有せず、再起動で消去されます。other チャンネルは非対応です。",
     maxRetries: "最大リトライ回数",
     blacklistThreshold: "ブラックリスト閾値",
     keyValidationInterval: "キー検証間隔",

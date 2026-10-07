@@ -89,7 +89,7 @@ func newGroupHandlerTestServer(t *testing.T) (*Server, *gin.Engine) {
 	}
 	settings := config.NewSystemSettingsManager()
 	memory := &groupHandlerTestStore{MemoryStore: store.NewMemoryStore()}
-	manager := services.NewGroupManager(database, memory, settings, services.NewSubGroupManager(memory))
+	manager := services.NewGroupManager(database, memory, settings, services.NewSubGroupManager(memory), nil)
 	if err := manager.Initialize(); err != nil {
 		t.Fatal(err)
 	}

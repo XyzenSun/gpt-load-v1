@@ -163,6 +163,8 @@ var MessagesEnUS = map[string]string{
 	"config.proxy_url_desc":               "Global HTTP/HTTPS proxy server URL, e.g., http://user:pass@host:port. If empty, uses environment variable configuration.",
 
 	// Key config related
+	"config.enable_key_affinity":             "Enable Key Affinity",
+	"config.enable_key_affinity_desc":        "Remember each group's last successful key in local memory and prefer reusing it; switch on failure. Not shared across instances and cleared on restart. Unsupported for the 'other' channel.",
 	"config.max_retries":                     "Max Retries",
 	"config.max_retries_desc":                "Maximum number of retries for a single request using different keys, 0 for no retries.",
 	"config.blacklist_threshold":             "Blacklist Threshold",

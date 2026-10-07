@@ -163,6 +163,8 @@ var MessagesZhCN = map[string]string{
 	"config.proxy_url_desc":               "全局 HTTP/HTTPS 代理服务器地址，例如：http://user:pass@host:port。如果为空，则使用环境变量配置。",
 
 	// Key config related
+	"config.enable_key_affinity":             "启用密钥亲和",
+	"config.enable_key_affinity_desc":        "在单机内存中记住分组上次成功的密钥，优先复用，失败时切换。实例间不共享，重启后清空；other 渠道不支持。",
 	"config.max_retries":                     "最大重试次数",
 	"config.max_retries_desc":                "单个请求使用不同 Key 的最大重试次数，0为不重试。",
 	"config.blacklist_threshold":             "黑名单阈值",

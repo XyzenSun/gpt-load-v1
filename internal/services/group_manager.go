@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"gpt-load/internal/config"
 	"gpt-load/internal/failover"
+	"gpt-load/internal/keypool"
 	"gpt-load/internal/models"
 	"gpt-load/internal/store"
 	"gpt-load/internal/syncer"
@@ -24,6 +25,7 @@ type GroupManager struct {
 	store           store.Store
 	settingsManager *config.SystemSettingsManager
 	subGroupManager *SubGroupManager
+	keyProvider     *keypool.KeyProvider
 }
 
 // NewGroupManager creates a new, uninitialized GroupManager.
@@ -32,12 +34,14 @@ func NewGroupManager(
 	store store.Store,
 	settingsManager *config.SystemSettingsManager,
 	subGroupManager *SubGroupManager,
+	keyProvider *keypool.KeyProvider,
 ) *GroupManager {
 	return &GroupManager{
 		db:              db,
 		store:           store,
 		settingsManager: settingsManager,
 		subGroupManager: subGroupManager,
+		keyProvider:     keyProvider,
 	}
 }
 
@@ -145,6 +149,9 @@ func (gm *GroupManager) Initialize() error {
 
 	afterReload := func(newCache map[string]*models.Group) {
 		gm.subGroupManager.RebuildSelectors(newCache)
+		if gm.keyProvider != nil {
+			gm.keyProvider.PruneKeyAffinity(newCache)
+		}
 	}
 
 	syncer, err := syncer.NewCacheSyncer(

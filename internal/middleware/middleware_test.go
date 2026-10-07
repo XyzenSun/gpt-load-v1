@@ -90,7 +90,7 @@ func newAuthTestGroupManager(t *testing.T) *services.GroupManager {
 			t.Fatal(err)
 		}
 	}
-	gm := services.NewGroupManager(db, nil, config.NewSystemSettingsManager(), services.NewSubGroupManager(nil))
+	gm := services.NewGroupManager(db, nil, config.NewSystemSettingsManager(), services.NewSubGroupManager(nil), nil)
 	if err := gm.Initialize(); err != nil {
 		t.Fatal(err)
 	}

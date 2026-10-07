@@ -543,6 +543,9 @@ export default {
     globalProxyKeys: "Global Proxy Keys",
     requestTimeout: "Request Timeout",
     connectTimeout: "Connect Timeout",
+    enableKeyAffinity: "Enable Key Affinity",
+    enableKeyAffinityDesc:
+      "Remember each group's last successful key in local memory and prefer reusing it; switch on failure. Not shared across instances and cleared on restart. Unsupported for the 'other' channel.",
     maxRetries: "Max Retries",
     blacklistThreshold: "Blacklist Threshold",
     keyValidationInterval: "Key Validation Interval",

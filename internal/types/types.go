@@ -35,6 +35,7 @@ type SystemSettings struct {
 	ProxyURL              string `json:"proxy_url" name:"config.proxy_url" category:"config.category.request" desc:"config.proxy_url_desc"`
 
 	// 密钥配置
+	EnableKeyAffinity            bool   `json:"enable_key_affinity" default:"false" name:"config.enable_key_affinity" category:"config.category.key" desc:"config.enable_key_affinity_desc"`
 	MaxRetries                   int    `json:"max_retries" default:"3" name:"config.max_retries" category:"config.category.key" desc:"config.max_retries_desc" validate:"required,min=0"`
 	BlacklistThreshold           int    `json:"blacklist_threshold" default:"3" name:"config.blacklist_threshold" category:"config.category.key" desc:"config.blacklist_threshold_desc" validate:"required,min=0"`
 	FailoverStatusCodes          string `json:"failover_status_codes" default:"400-403,405-999" name:"config.failover_status_codes" category:"config.category.key" desc:"config.failover_status_codes_desc"`

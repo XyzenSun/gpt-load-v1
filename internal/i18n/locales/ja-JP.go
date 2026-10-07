@@ -163,6 +163,8 @@ var MessagesJaJP = map[string]string{
 	"config.proxy_url_desc":               "グローバルHTTP/HTTPSプロキシサーバーURL。例：http://user:pass@host:port。空の場合は環境変数設定を使用。",
 
 	// Key config related
+	"config.enable_key_affinity":             "キーアフィニティを有効化",
+	"config.enable_key_affinity_desc":        "各グループで最後に成功したキーを単一インスタンスのメモリに記憶し、優先的に再利用します。失敗時は切り替えます。インスタンス間で共有せず、再起動で消去されます。other チャンネルは非対応です。",
 	"config.max_retries":                     "最大リトライ数",
 	"config.max_retries_desc":                "異なるキーを使用した単一リクエストの最大リトライ数、0でリトライなし。",
 	"config.blacklist_threshold":             "ブラックリストしきい値",

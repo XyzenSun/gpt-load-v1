@@ -526,6 +526,9 @@ export default {
     globalProxyKeys: "全局代理密钥",
     requestTimeout: "请求超时",
     connectTimeout: "连接超时",
+    enableKeyAffinity: "启用密钥亲和",
+    enableKeyAffinityDesc:
+      "在单机内存中记住分组上次成功的密钥，优先复用，失败时切换。实例间不共享，重启后清空；other 渠道不支持。",
     maxRetries: "最大重试次数",
     blacklistThreshold: "黑名单阈值",
     keyValidationInterval: "密钥验证间隔",
