@@ -8,7 +8,7 @@
 
 ## v1 镜像标签规则
 
-镜像地址为 `tbphp/gpt-load` 与 `ghcr.io/${{ github.repository }}`,`flavor` 设置 `latest=false`.`docker/metadata-action` 生成的标签有三类:`type=ref,event=tag` 取 Git 标签本身;`type=raw,value=1,enable=${{ !contains(github.ref, '-') }}` 仅在标签不含连字符(即正式版)时生成 `1`;`type=raw,value=beta,enable=${{ contains(github.ref, '-beta') }}` 仅在标签含 `-beta` 时生成 `beta`.因此 `1` 代表稳定版,beta 版不会获得该标签.
+镜像仅发布到当前仓库对应的 GHCR, 通过 Bash 将 `${{ github.repository }}` 转为小写; 当前地址为 `ghcr.io/xyzensun/gpt-load-v1`. 使用 `GITHUB_TOKEN` 登录, 不依赖 Docker Hub 凭据. `flavor` 设置 `latest=false`.`docker/metadata-action` 生成的标签有三类:`type=ref,event=tag` 取 Git 标签本身;`type=raw,value=1,enable=${{ !contains(github.ref, '-') }}` 仅在标签不含连字符(即正式版)时生成 `1`;`type=raw,value=beta,enable=${{ contains(github.ref, '-beta') }}` 仅在标签含 `-beta` 时生成 `beta`.因此 `1` 代表稳定版,beta 版不会获得该标签.
 
 ## 分平台构建
 
